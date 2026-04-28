@@ -2,10 +2,12 @@
 
 # manager
 
-This directory is a Bun + Next.js full-stack TypeScript application that replaces two components from the original `stargate` project:
+This directory is a Bun + Next.js + TypeScript full-stack management application for AgentCortex.
 
-- **`caddymgr`** (Go): management API server — reimplemented here as Next.js Route Handlers under `app/api/`.
-- **`stargate-manager`** (Node + Next.js): frontend dashboard — migrated into this project's App Router pages.
+It exists to help users operate and manage `caddy-runtime`, which is the main runtime component of this repository. The manager provides both:
+
+- a backend API implemented with Next.js Route Handlers under `app/api/`
+- a frontend dashboard implemented with the Next.js App Router
 
 ## Build and Run
 
@@ -42,26 +44,32 @@ The backend API and frontend are served from the same Next.js process on the sam
 ```
 manager/
 ├── app/
-│   ├── api/              ← Backend: Route Handlers (replaces caddymgr Go server)
+│   ├── api/              ← Backend: Route Handlers for manager APIs and runtime orchestration
 │   │   ├── auth/         ← POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
 │   │   ├── caddy/        ← Caddy server/route management endpoints
 │   │   └── admin/        ← Proxy catch-all to caddy-runtime gateway admin API
-│   └── (dashboard)/      ← Frontend: App Router pages (migrated from stargate-manager)
+│   └── (dashboard)/      ← Frontend: App Router pages for runtime management
 │       ├── dashboard/
 │       ├── login/
 │       └── ...
-├── components/           ← Shared UI components (migrated from stargate-manager/components/)
+├── components/           ← Shared UI components
 ├── hooks/                ← Custom React hooks
 └── lib/
     ├── api.ts            ← Typed fetch helpers for backend API calls (frontend side)
     ├── auth.ts           ← localStorage session helpers (token, username)
-    ├── caddy-manager.ts  ← Caddy admin API client (server-side, replaces caddymgr/manager.go)
-    └── gateway-proxy.ts  ← Gateway admin API proxy with session caching (replaces caddymgr/proxy.go)
+    ├── caddy-manager.ts  ← Caddy admin API client for caddy-runtime management
+    └── gateway-proxy.ts  ← Gateway admin API proxy with session caching
 ```
+
+## Relationship To Other Subprojects
+
+- `manager` does not implement Caddy modules. Runtime behavior belongs in `caddy-runtime` or in `plugins`.
+- `manager` talks to `caddy-runtime` through the Caddy admin API and the gateway admin API.
+- `plugins` extend runtime capabilities. If the UI or manager API needs to expose a new plugin-backed capability, keep the runtime/plugin implementation and manager integration clearly separated by HTTP contracts and typed request/response helpers.
 
 ## Backend API (Route Handlers)
 
-Route Handlers run on the server and replace the Go `caddymgr` program. Implement them under `app/api/`.
+Route Handlers run on the server. Implement them under `app/api/`.
 
 ### Auth
 
@@ -108,14 +116,14 @@ Any `/api/admin/` request not matched by a more-specific handler is proxied to t
 
 ## Frontend (App Router Pages)
 
-Pages are migrated from `stargate-manager`. The entry route (`/`) redirects to `/dashboard`.
+The entry route (`/`) redirects to `/dashboard`.
 
 Key frontend conventions:
 - `lib/auth.ts`: `localStorage` helpers — `getToken()`, `saveSession()`, `clearSession()`, `isAuthenticated()`.
 - `lib/api.ts`: typed `adminFetch<T>()` wrapper that injects `Authorization: Bearer <token>`, and on 401 clears the session and redirects to `/login`.
 - `NEXT_PUBLIC_API_BASE_URL` env var sets the API base URL (default `http://localhost:8080` for compatibility; in this project the backend and frontend are co-hosted so set it to an empty string or omit).
 - UI uses `components/auth-guard.tsx` to protect dashboard routes.
-- Navigation structure mirrors `stargate-manager/components/dashboard-nav.tsx` (Overview, Routes, Providers, Models, Credentials, Virtual Keys, Usage, Gateway, Servers).
+- Navigation structure should reflect the manager's current runtime-management features (for example Overview, Routes, Providers, Models, Credentials, Virtual Keys, Usage, Gateway, Servers).
 
 ## Key Types
 

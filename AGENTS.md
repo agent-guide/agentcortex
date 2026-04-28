@@ -2,18 +2,27 @@
 
 ## Project Overview
 
-AgentCortex is a refactored version of `../stargate`. It is organized as three sibling subprojects. Keep changes scoped to the subproject that owns the behavior you are changing, and avoid coupling runtime, plugin, and manager logic beyond their documented HTTP boundaries.
+AgentCortex is a standalone project organized as three sibling subprojects: `caddy-runtime`, `manager`, and `plugins`.
+
+## Subproject Relationship
+
+- `caddy-runtime` is the main functional component. It is a Caddy runtime that bundles the Caddy Agent Gateway module from `~/github/agent-guide/caddy-agent-gateway/` into a runnable Caddy binary.
+- `manager` is a full-stack management application built with Bun + Next.js + TypeScript. It helps users operate and manage `caddy-runtime` through a dedicated backend API and web UI.
+- `plugins` contains extension plugins for `caddy-runtime`. These plugins add optional gateway- or runtime-related capabilities without changing the manager application.
+
+Keep changes scoped to the subproject that owns the behavior you are changing, and avoid coupling runtime, plugin, and manager logic beyond their documented HTTP boundaries.
 
 ## Subprojects
 
 ### `caddy-runtime`
 
-Purpose: custom Caddy Server distribution that bundles AgentCortex-related Caddy modules into one runnable Caddy binary. This is the equivalent of `caddy-stargate` in the original project.
+Purpose: custom Caddy Server distribution that bundles AgentCortex-related Caddy modules into one runnable Caddy binary.
 
 Responsibilities:
 - Build the Caddy entrypoint (`cmd/caddy/main.go`).
 - Register Caddy modules through blank imports.
-- Integrate local or released Caddy modules such as the agent-gateway module from `../caddy-agent-gateway`.
+- Integrate local or released Caddy modules such as the agent-gateway module from `~/github/agent-guide/caddy-agent-gateway/`.
+- Serve as the primary runtime component used by end users and managed by `manager`.
 
 Boundaries:
 - Do not put management API orchestration here; that belongs in `manager/`.
@@ -30,7 +39,7 @@ go build ./cmd/caddy
 
 ### `plugins`
 
-Purpose: optional Caddy module plugins that extend the gateway (e.g. provider adapters, payment integrations). Mirrors the `plugins/` directory of the original project.
+Purpose: optional Caddy module plugins that extend `caddy-runtime` and the gateway (for example provider adapters or payment integrations).
 
 Responsibilities:
 - Each plugin is a standalone Go module that registers one or more Caddy modules via `init()`.
@@ -41,11 +50,12 @@ Boundaries:
 
 ### `manager`
 
-Purpose: full-stack TypeScript management application built with Bun + Next.js. This subproject replaces both `caddymgr` (Go management API server) and `stargate-manager` (Next.js frontend) from the original project.
+Purpose: full-stack management application built with Bun + Next.js + TypeScript for operating and managing `caddy-runtime`.
 
 Responsibilities:
 - **Backend API** (Next.js Route Handlers under `app/api/`): authenticate manager users, manage Caddy servers and routes through the Caddy admin API, proxy remaining `/admin/*` requests to the gateway admin API.
 - **Frontend UI** (Next.js App Router pages): login, dashboard, provider management, credential management, route and server administration.
+- Provide the main user-facing management surface for the runtime, while keeping runtime behavior inside `caddy-runtime`.
 
 Boundaries:
 - Backend API routes own orchestration and auth for the management layer; they do not implement Caddy modules.
