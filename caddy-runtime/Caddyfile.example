@@ -1,0 +1,73 @@
+# Caddy Agent Gateway
+# Caddy App module ID: "agent_gateway"
+# HTTP handler module IDs:
+# - "http.handlers.agent_route_dispatcher" (Caddyfile directive: "agent_route_dispatcher")
+# Dispatcher LLM API module IDs:
+# - "agent_route_dispatcher.llm_apis.openai"
+# - "agent_route_dispatcher.llm_apis.anthropic"
+# - "http.handlers.agent_gateway_admin" (Caddyfile directive: "agent_gateway_admin")
+
+{
+	admin localhost:2019
+
+	agent_gateway {
+		config_store sqlite {
+			path ./data/configstore.db
+		}
+
+		provider zhipu-main {
+			provider_name zhipuac
+			api_key {$ZHIPU_API_KEY}
+			base_url https://open.bigmodel.cn/api/anthropic
+			default_model glm-4.7
+			option debug_request true
+		}
+
+		localapikey test-key {
+			user_id local-test
+			name "Local Python test key"
+			allowed_route zhipu-anthropic-chat
+		}
+
+		route zhipu-anthropic-chat {
+			llm_api anthropic
+			path_prefix /
+			require_local_api_key
+			allowed_model glm-4.7
+			target provider zhipu-main
+		}
+	}
+}
+
+http://127.0.0.1:8081 {
+	# Admin routes
+	route /admin/* {
+		agent_gateway_admin {
+			admin_user default
+			admin_password_hash $2a$14$Qxwz94t//fcaF.lyVzsIee0ZZuSNgS841WmLUo/NKGN5LlQzNg5Me # dummy
+		}
+	}
+}
+
+http://127.0.0.1:8082 {
+	log {
+		output stderr
+		format console
+	}
+
+	# LLM API routes
+	agent_route_dispatcher {
+		llm_api openai
+		llm_api anthropic
+	}
+}
+
+http://127.0.0.1:8070 {
+	# Block Syntax
+	route /news/graphql {
+		pgrest_graphql {
+			db_url "postgres://user:passwd@localhost:5432/graphqldb"
+			table_name "news"
+		}
+	}
+}
