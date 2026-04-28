@@ -28,6 +28,10 @@ function caddyAdminAddr(): string {
   return (process.env.CADDY_ADMIN_ADDR ?? "http://localhost:2019").replace(/\/$/, "");
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 async function caddyGET(path: string): Promise<unknown> {
   checkAllowed(path);
   const res = await fetch(`${caddyAdminAddr()}/config${path}`);
@@ -236,6 +240,18 @@ function fromCaddyRoute(idx: number, r: CaddyRoute): RouteResponse {
   };
 }
 
+function normalizeCaddyServer(raw: unknown): CaddyServer {
+  if (!isRecord(raw)) {
+    return { listen: [] };
+  }
+
+  const listen = Array.isArray(raw["listen"]) ? raw["listen"].filter((v): v is string => typeof v === "string") : [];
+  const routes = Array.isArray(raw["routes"]) ? (raw["routes"] as CaddyRoute[]) : [];
+  const tls = isRecord(raw["tls"]) ? (raw["tls"] as CaddyServer["tls"]) : undefined;
+
+  return { listen, routes, tls };
+}
+
 function fromCaddyServer(id: string, srv: CaddyServer): ServerResponse {
   const readonly = isProtectedServer(id, srv);
   const resp: ServerResponse = {
@@ -276,7 +292,7 @@ function toCaddyRoute(req: RouteRequest): CaddyRoute {
 
 async function getRawServer(id: string): Promise<CaddyServer> {
   const raw = await caddyGET(`/apps/http/servers/${id}`);
-  return raw as CaddyServer;
+  return normalizeCaddyServer(raw);
 }
 
 async function ensureServerMutable(id: string): Promise<void> {
@@ -294,8 +310,11 @@ function isEmptyCaddyServer(srv: CaddyServer): boolean {
 
 export async function listServers(): Promise<ServerResponse[]> {
   const raw = await caddyGET("/apps/http/servers");
-  const servers = raw as Record<string, CaddyServer>;
-  return Object.entries(servers).map(([id, srv]) => fromCaddyServer(id, srv));
+  if (!isRecord(raw)) return [];
+
+  return Object.entries(raw)
+    .filter(([, srv]) => srv !== null)
+    .map(([id, srv]) => fromCaddyServer(id, normalizeCaddyServer(srv)));
 }
 
 export async function getServer(id: string): Promise<ServerResponse> {

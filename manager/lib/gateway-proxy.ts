@@ -1,8 +1,29 @@
 // Module-level cached token, shared across requests via globalThis.
-const g = globalThis as typeof globalThis & { __gatewayToken?: string };
+const g = globalThis as typeof globalThis & {
+  __gatewayToken?: string;
+  __gatewayBaseURL?: string;
+};
 
 function gatewayAddr(): string {
   return (process.env.GATEWAY_ADDR ?? "http://localhost:8080").replace(/\/$/, "");
+}
+
+function gatewayAddrCandidates(): string[] {
+  const configured = g.__gatewayBaseURL ?? gatewayAddr();
+  const out = [configured];
+  try {
+    const url = new URL(configured);
+    if (url.hostname === "localhost") {
+      url.hostname = "127.0.0.1";
+      out.push(url.toString().replace(/\/$/, ""));
+    } else if (url.hostname === "127.0.0.1") {
+      url.hostname = "localhost";
+      out.push(url.toString().replace(/\/$/, ""));
+    }
+  } catch {
+    // Ignore invalid fallback generation and let fetch report the real error.
+  }
+  return [...new Set(out)];
 }
 
 function gatewayCredentials(): { user: string; pass: string } {
@@ -12,21 +33,70 @@ function gatewayCredentials(): { user: string; pass: string } {
   };
 }
 
+function extractBearerToken(value: string | null): string {
+  if (!value) return "";
+  return value.startsWith("Bearer ") ? value.slice("Bearer ".length).trim() : "";
+}
+
 async function login(): Promise<string> {
   const { user, pass } = gatewayCredentials();
-  const res = await fetch(`${gatewayAddr()}/admin/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: user, password: pass }),
-  });
-  const raw = await res.text();
-  if (!res.ok) {
-    throw new Error(`gateway login ${res.status}: ${raw.trim()}`);
+  const errors: string[] = [];
+  for (const baseURL of gatewayAddrCandidates()) {
+    let res: Response;
+    try {
+      res = await fetch(`${baseURL}/admin/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: user, password: pass }),
+      });
+    } catch (e) {
+      errors.push(`gateway unreachable (${baseURL}): ${String(e)}`);
+      continue;
+    }
+
+    const raw = await res.text();
+    if (!res.ok) {
+      errors.push(`gateway login ${res.status} via ${baseURL}: ${raw.trim() || "(empty body)"}`);
+      continue;
+    }
+
+    const headerToken = extractBearerToken(res.headers.get("Authorization"));
+    if (headerToken) {
+      g.__gatewayBaseURL = baseURL;
+      g.__gatewayToken = headerToken;
+      return headerToken;
+    }
+
+    if (!raw.trim()) {
+      const contentType = res.headers.get("Content-Type") || "(missing content-type)";
+      errors.push(
+        `gateway login ${res.status} via ${baseURL}: missing token in empty response body (content-type: ${contentType})`,
+      );
+      continue;
+    }
+
+    let body: { token?: string };
+    try {
+      body = JSON.parse(raw) as { token?: string };
+    } catch {
+      const contentType = res.headers.get("Content-Type") || "(missing content-type)";
+      errors.push(
+        `gateway login ${res.status} via ${baseURL}: expected JSON or Authorization header token, content-type ${contentType}, body: ${raw.slice(0, 200)}`,
+      );
+      continue;
+    }
+
+    if (!body.token) {
+      errors.push(`gateway login ${res.status} via ${baseURL}: missing token in response`);
+      continue;
+    }
+
+    g.__gatewayBaseURL = baseURL;
+    g.__gatewayToken = body.token;
+    return body.token;
   }
-  const body = JSON.parse(raw) as { token?: string };
-  if (!body.token) throw new Error("gateway login: missing token in response");
-  g.__gatewayToken = body.token;
-  return body.token;
+
+  throw new Error(errors.join("; "));
 }
 
 async function getToken(): Promise<string> {
@@ -89,7 +159,6 @@ export async function proxyToGateway(req: Request, path: string): Promise<Respon
   }
 
   const url = new URL(req.url);
-  const targetURL = `${gatewayAddr()}${path}${url.search}`;
   const body = await req.arrayBuffer();
 
   let token: string;
@@ -99,7 +168,7 @@ export async function proxyToGateway(req: Request, path: string): Promise<Respon
     return Response.json({ error: `gateway auth failed: ${String(e)}` }, { status: 502 });
   }
 
-  let result = await forwardOnce(req, targetURL, token, body);
+  let result = await forwardOnce(req, `${g.__gatewayBaseURL ?? gatewayAddr()}${path}${url.search}`, token, body);
   if (result) return result;
 
   // 401 — stale token, re-login once
@@ -109,7 +178,7 @@ export async function proxyToGateway(req: Request, path: string): Promise<Respon
   } catch (e) {
     return Response.json({ error: `gateway re-auth failed: ${String(e)}` }, { status: 502 });
   }
-  result = await forwardOnce(req, targetURL, token, body);
+  result = await forwardOnce(req, `${g.__gatewayBaseURL ?? gatewayAddr()}${path}${url.search}`, token, body);
   if (!result) {
     return Response.json({ error: "gateway returned unauthorized after re-auth" }, { status: 502 });
   }

@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { createSession } from "@/lib/session";
+import { getServerEnv } from "@/lib/server-env";
 
 export async function POST(req: Request) {
   let body: { username?: string; password?: string };
@@ -14,8 +15,8 @@ export async function POST(req: Request) {
     return Response.json({ error: "username and password are required" }, { status: 400 });
   }
 
-  const adminUser = process.env.CADDYMGR_ADMIN_USER ?? "";
-  const adminHash = process.env.CADDYMGR_ADMIN_PASSWORD_HASH ?? "";
+  const adminUser = getServerEnv("CADDYMGR_ADMIN_USER");
+  const adminHash = getServerEnv("CADDYMGR_ADMIN_PASSWORD_HASH");
 
   if (!adminUser) {
     return Response.json({ error: "admin credentials not configured" }, { status: 503 });
