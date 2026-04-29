@@ -3,12 +3,15 @@ module github.com/agent-guide/agentcortex/caddy-runtime
 go 1.25.5
 
 require (
+	github.com/agent-guide/agentcortex/plugins/caddy-provider-zhipuac v0.0.0-00010101000000-000000000000
 	github.com/agent-guide/caddy-agent-gateway v0.0.0
 	github.com/agent-guide/caddy-x402pay v0.0.1
 	github.com/caddyserver/caddy/v2 v2.10.2
 )
 
 replace github.com/agent-guide/caddy-agent-gateway => ../../caddy-agent-gateway
+
+replace github.com/agent-guide/agentcortex/plugins/caddy-provider-zhipuac => ../plugins/caddy-provider-zhipuac
 
 require (
 	cel.dev/expr v0.25.1 // indirect

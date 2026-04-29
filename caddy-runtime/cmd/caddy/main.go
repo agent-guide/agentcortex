@@ -3,11 +3,12 @@ package main
 import (
 	caddycmd "github.com/caddyserver/caddy/v2/cmd"
 
+	_ "github.com/agent-guide/agentcortex/plugins/caddy-provider-zhipuac"
 	_ "github.com/agent-guide/caddy-agent-gateway/admin"
-	_ "github.com/agent-guide/caddy-agent-gateway/api"
-	_ "github.com/agent-guide/caddy-agent-gateway/api/llmapi/anthropic"
-	_ "github.com/agent-guide/caddy-agent-gateway/api/llmapi/openai"
 	_ "github.com/agent-guide/caddy-agent-gateway/cliauth/authenticator"
+	_ "github.com/agent-guide/caddy-agent-gateway/dispatcher"
+	_ "github.com/agent-guide/caddy-agent-gateway/dispatcher/llmapi/anthropic"
+	_ "github.com/agent-guide/caddy-agent-gateway/dispatcher/llmapi/openai"
 	_ "github.com/agent-guide/caddy-agent-gateway/gateway"
 	_ "github.com/agent-guide/caddy-agent-gateway/llm/provider/anthropic"
 	_ "github.com/agent-guide/caddy-agent-gateway/llm/provider/gemini"
